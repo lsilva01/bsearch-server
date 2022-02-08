@@ -1,19 +1,37 @@
 const AppSearchClient = require('@elastic/app-search-node')
 
+const levenshtein = require('./levenshtein')
+
+
+
 const apiKey = process.env.API_KEY
 const baseUrlFn = () => process.env.BASE_URL_FN
 const client = new AppSearchClient(undefined, apiKey, baseUrlFn)
 
 const engineName = process.env.ENGINE_NAME
-const searchFields = { title : {}, body_content: {} }
 const resultFields = { id: { raw: {} }, title: { raw: {} }, body_content: { raw: {} }, domains: { raw: {} }, url: { raw: {} } }
-const options = { search_fields: searchFields, result_fields: resultFields, page: { size: 70 } }
-
 
 async function search(query) {
+
+    const searchFields = { title : {}, body_content: {} }
+    const options = { search_fields: searchFields, result_fields: resultFields, page: { size: 100 } }
+
     try {
         var response = await client.search(engineName, query, options)
         return handleResponse(response)
+    } catch (error) {
+        console.error(error);
+    }
+}
+
+async function searchByTitle(query) {
+
+    const searchFields = { title : {} }
+    const options = { search_fields: searchFields, result_fields: resultFields, page: { size: 100 } }
+
+    try {
+        var response = await client.search(engineName, query, options)
+        return handleResponseEmail(response, query)
     } catch (error) {
         console.error(error);
     }
@@ -54,6 +72,35 @@ function handleResponse(response) {
     return result
 }
 
+
+
+function handleResponseEmail(response, query) {
+
+    if (response.meta.page.size == 0) return []
+
+    let result = []
+
+    for(let doc of response.results) {
+        
+        var item = {};
+        item.id = doc.id.raw;
+        item.url = doc.url.raw;
+        item.title = doc.title.raw;
+        item.body_content = doc.body_content.raw;
+        item.domain = doc.domains.raw[0];
+
+        const title = item.title.replace(/Enc:/gi, '').replace(/Re:/gi, '')
+        const q = query.replace(/Enc:/gi, '').replace(/Re:/gi, '')
+
+        if (levenshtein(title, q) < 6) {
+            result.push(item)
+        } 
+    }
+
+    return result
+}
+
 module.exports = {
-    search
+    search,
+    searchByTitle
 }
