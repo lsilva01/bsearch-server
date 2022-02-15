@@ -2,7 +2,7 @@ const AppSearchClient = require('@elastic/app-search-node')
 
 const levenshtein = require('./levenshtein')
 
-
+const stackoverflow = require('./stackoverflow')
 
 const apiKey = process.env.API_KEY
 const baseUrlFn = () => process.env.BASE_URL_FN
@@ -17,8 +17,15 @@ async function search(query) {
     const options = { search_fields: searchFields, result_fields: resultFields, page: { size: 100 } }
 
     try {
-        var response = await client.search(engineName, query, options)
-        return handleResponse(response)
+        let crawlerResponse = await client.search(engineName, query, options)
+        let crawlerItems = handleResponse(crawlerResponse);
+
+        let stackoverflowResponse = await stackoverflow.search(query)
+
+        return {
+            crawler_items: crawlerItems,
+            stack_overflow_items: stackoverflowResponse,
+        };
     } catch (error) {
         console.error(error);
     }
@@ -44,6 +51,11 @@ function handleResponse(response) {
     let result = []
 
     for(let doc of response.results) {
+
+        if (doc.domains.raw[0] == "https://bitcoin.stackexchange.com") {
+            continue;
+        }
+
         var item = {};
         item.id = doc.id.raw;
         item.url = doc.url.raw;
